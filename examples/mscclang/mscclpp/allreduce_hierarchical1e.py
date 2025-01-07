@@ -76,11 +76,10 @@ def allpairs_all_gather(gpuIds, numTbs, sizePerTb, sizePerRank, offset):
                     c.wait(gpuIds[peer], Buffer.input, peerChunkIndex, recvtb=tb)
 
 # Performs two levels of allReduce
-def hierarchical_allreduce(gpus, gpusPerRank, instances, protocol):
+def hierarchical_allreduce(gpus, gpusPerRank, numTbs, instances, protocol):
     nrows = gpusPerRank
     ncols = gpus // nrows
     gpusAcrossRank = gpus // gpusPerRank
-    numTbs = 2
     # ncols = gpusPerRank
     # nrows = gpus // ncols
     chunkperloop = gpus * numTbs #gpus * gpus
@@ -89,8 +88,6 @@ def hierarchical_allreduce(gpus, gpusPerRank, instances, protocol):
 
     innerSize = chunkperloop # // gpusPerRank
     outerSize = chunkperloop // (gpusPerRank) # * gpusAcrossRank)
-
-    # numTbs = 2
 
     with MSCCLPPProgram("hierarchical_allreduce",
         topology,
@@ -120,11 +117,6 @@ def hierarchical_allreduce(gpus, gpusPerRank, instances, protocol):
             
             allpairs_reduce_scatter(gpuIds, numTbs, sizePerTb, sizePerRank, 0)
 
-        # for n in range(gpus):
-        #     # explicit barrier
-        #     r = rank(n)
-        #     r.barrier(tb_list=list(range(numTbs))) #TODO assumes
-
         # Reduce-Scatter across rows, assumption being GPUs in a row have slower connectivity - PCIe, IP NW
         # Each GPU exachanges (1 / rows * cols) * (cols - 1) of data with other GPUs in the same row - less data is exchanged
         # After this step, first GPU each row, will have 1st 1/(nrows * ncols), 2nd will have 2nd of 1/(nrows * ncols)
@@ -138,11 +130,6 @@ def hierarchical_allreduce(gpus, gpusPerRank, instances, protocol):
 
             allpairs_reduce_scatter(gpuIds, numTbs, sizePerTb, sizePerRank, offset * n)
 
-        for n in range(gpus):
-            # explicit barrier
-            r = rank(n)
-            r.barrier(tb_list=list(range(numTbs))) #TODO assumes
-
         # AllGather: AllGather phase goes in reverse order, first gather across rows of GPU
         # After this step, Each GPU in a rows have 1/ncols of data
         for n in range(nrows):
@@ -151,11 +138,6 @@ def hierarchical_allreduce(gpus, gpusPerRank, instances, protocol):
                 gpuIds.append(n + m * nrows)
 
             allpairs_all_gather(gpuIds, numTbs, sizePerTb, sizePerRank, offset * n)
-
-        for n in range(gpus):
-            # explicit barrier
-            r = rank(n)
-            r.barrier(tb_list=list(range(numTbs))) #TODO assumes
 
         # AllGather: AllGather phase goes in reverse order, 2nd AllGather across columns of GPU
         # After this step, Each GPU the systems will have complete reduced data
@@ -175,9 +157,10 @@ def hierarchical_allreduce(gpus, gpusPerRank, instances, protocol):
 parser = argparse.ArgumentParser()
 parser.add_argument('num_gpus', type=int, help ='number of gpus')
 parser.add_argument('num_gpus_per_rank', type=int, help ='number of gpus per rank')
+parser.add_argument('num_tbs', type=int, help='number of threadblocks')
 parser.add_argument('instances', type=int, help='number of instances')
 parser.add_argument('--protocol', type=str, default='LL', choices=['Simple', 'LL128', 'LL'], help='Protocol')
 
 args = parser.parse_args()
 
-hierarchical_allreduce(args.num_gpus, args.num_gpus_per_rank, args.instances, args.protocol)
+hierarchical_allreduce(args.num_gpus, args.num_gpus_per_rank, args.num_tbs, args.instances, args.protocol)
