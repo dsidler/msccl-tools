@@ -21,7 +21,6 @@ def allpairs_reduce_scatter(gpuIds, numTbs, sizePerTb, sizePerRank, offset):
             # c = chunk(gpuIds[r], Buffer.input, chunkIndex, sizePerTb)
 
             for peer in range(ngpus):
-                peerIdx = peer if peer < r else (peer - 1)
                 if r != peer:
                     # peerChunkIndex = offset + peer * size + (sizePerTb * tb)
                     peerChunkIndex = offset + (tb * sizePerTb) + (peer * sizePerRank)
@@ -35,13 +34,10 @@ def allpairs_reduce_scatter(gpuIds, numTbs, sizePerTb, sizePerRank, offset):
             c = chunk(gpuIds[r], Buffer.input, chunkIndex, sizePerRank)
 
             for peer in range(ngpus):
-                peerIdx = peer if peer < r else (peer - 1)
-
                 if peer != r:
                     c.wait(gpuIds[peer], Buffer.input, chunkIndex, recvtb=tb)
 
             for peer in range(ngpus):
-                peerIdx = peer if peer < r else (peer - 1)
                 if peer != r:
                     c.reduce(chunk(gpuIds[peer], Buffer.input, chunkIndex, sizePerRank), recvtb=tb)
  
@@ -76,7 +72,7 @@ def allpairs_all_gather(gpuIds, numTbs, sizePerTb, sizePerRank, offset):
                     c.wait(gpuIds[peer], Buffer.input, peerChunkIndex, recvtb=tb)
 
 # Performs two levels of allReduce
-def hierarchical_allreduce(gpus, gpusPerRank, numTbs, instances, protocol):
+def hierarchical_allreduce(gpus, gpusPerRank, numTbs, instances):
     nrows = gpusPerRank
     ncols = gpus // nrows
     gpusAcrossRank = gpus // gpusPerRank
@@ -159,8 +155,7 @@ parser.add_argument('num_gpus', type=int, help ='number of gpus')
 parser.add_argument('num_gpus_per_rank', type=int, help ='number of gpus per rank')
 parser.add_argument('num_tbs', type=int, help='number of threadblocks')
 parser.add_argument('instances', type=int, help='number of instances')
-parser.add_argument('--protocol', type=str, default='LL', choices=['Simple', 'LL128', 'LL'], help='Protocol')
 
 args = parser.parse_args()
 
-hierarchical_allreduce(args.num_gpus, args.num_gpus_per_rank, args.num_tbs, args.instances, args.protocol)
+hierarchical_allreduce(args.num_gpus, args.num_gpus_per_rank, args.num_tbs, args.instances)
