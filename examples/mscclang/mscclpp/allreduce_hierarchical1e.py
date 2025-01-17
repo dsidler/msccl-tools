@@ -53,11 +53,11 @@ def allpairs_all_gather(gpuIds, numTbs, sizePerTb, sizePerRank, offset):
             chunkIndex = offset + (tb * sizePerTb) + (r * sizePerRank)
             c = chunk(gpuIds[r], Buffer.input, chunkIndex, sizePerRank)
             for peer in range(ngpus):
-                # peerIdx = peer if peer < r else (peer - 1)
-
                 if peer != r:
-                    # index = offset + r * size
                     c.put(gpuIds[peer], Buffer.input,  chunkIndex, sendtb=tb)
+ 
+            for peer in range(ngpus):
+                if peer != r:
                     c.signal(gpuIds[peer], Buffer.input, chunkIndex, sendtb=tb)
 
     # Each rank get final result from scratch space
